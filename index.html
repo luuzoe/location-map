@@ -393,7 +393,7 @@
           mapHandle = MapHelpers.mountMap(mapEl, {
             places: [place],
             baseStyle: theme,
-            center: [lng, lat],
+            center: { lng: lng, lat: lat },
             zoom: 17,
             marker: function () { return '<div class="you-pin" aria-label="လက်ရှိတည်နေရာ"></div>'; }
           }, showMapUnavailable);
