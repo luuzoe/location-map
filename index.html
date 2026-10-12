@@ -67,12 +67,15 @@
     .facts.show { display: flex; }
     .chip { display: inline-flex; min-height: 27px; align-items: center; padding: 4px 8px; border-radius: 7px; background: var(--accent-soft); color: var(--accent-strong); font: 700 10.5px/1.35 Manrope,"Noto Sans Myanmar",sans-serif; }
     .retry { margin-top: 10px; min-height: 38px; padding: 8px 12px; border: 0; border-radius: 9px; background: var(--accent); color: #fff; font-weight: 700; cursor: pointer; }
+    .style-switch { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; margin-top: 10px; padding: 3px; border: 1px solid var(--line); border-radius: 10px; background: var(--accent-soft); }
+    .style-btn { min-width: 0; min-height: 34px; padding: 6px 5px; border: 0; border-radius: 7px; background: transparent; color: var(--accent-strong); cursor: pointer; font: 700 10.5px/1.2 Manrope,"Noto Sans Myanmar",sans-serif; }
+    .style-btn[aria-pressed="true"] { background: var(--surface-solid); color: var(--ink); box-shadow: 0 2px 8px rgba(7,27,21,.14); }
 
     .map-tools { position: absolute; z-index: 6; top: max(12px, env(safe-area-inset-top)); right: 12px; display: grid; gap: 8px; }
     .tool-btn { display: grid; place-items: center; width: 48px; min-height: 48px; padding: 0; border: 1px solid var(--line); border-radius: 13px; background: var(--surface-solid); color: var(--accent-strong); box-shadow: var(--shadow); cursor: pointer; font-weight: 700; }
     .tool-btn svg { width: 23px; height: 23px; }
     .mode-btn { font: 700 12px/1 Manrope,"Noto Sans Myanmar",sans-serif; }
-    .tool-btn:focus-visible, .retry:focus-visible { outline: 3px solid var(--accent-strong); outline-offset: 3px; }
+    .tool-btn:focus-visible, .retry:focus-visible, .style-btn:focus-visible { outline: 3px solid var(--accent-strong); outline-offset: 3px; }
 
     .tip { position: absolute; z-index: 4; left: 12px; bottom: max(30px, calc(env(safe-area-inset-bottom) + 14px)); max-width: min(330px, calc(100% - 24px)); padding: 9px 11px; border: 1px solid var(--line); border-radius: 11px 11px 4px 11px; background: var(--surface); color: var(--muted); box-shadow: 0 8px 22px rgba(7,27,21,.13); font-size: 10.5px; line-height: 1.6; }
     .tip strong { color: var(--ink); }
@@ -108,6 +111,7 @@
       .maplibregl-ctrl-top-right { top: 116px; right: 0; }
       .tip { left: 9px; bottom: max(30px, calc(env(safe-area-inset-bottom) + 13px)); max-width: calc(100% - 18px); }
       .message { font-size: 11px; }
+      .style-btn { font-size: 10px; }
     }
     @media (prefers-reduced-motion: reduce) { .status-dot.busy { animation: none; } }
   </style>
@@ -129,6 +133,11 @@
         <span class="chip" id="coordChip">—</span>
       </div>
       <button class="retry" id="retryBtn" type="button" hidden>ထပ်မံရှာမည်</button>
+      <div class="style-switch" role="group" aria-label="မြေပုံပုံစံ ရွေးချယ်ရန်">
+        <button class="style-btn" id="mapStyleBtn" type="button" aria-pressed="false">Map</button>
+        <button class="style-btn" id="satelliteStyleBtn" type="button" aria-pressed="false">Satellite</button>
+        <button class="style-btn" id="threeDStyleBtn" type="button" aria-pressed="true">3D</button>
+      </div>
     </section>
 
     <div class="map-tools" aria-label="မြေပုံကိရိယာများ">
@@ -156,6 +165,9 @@
     (function () {
       'use strict';
       var DEFAULT_CENTER = { lng: 96.1, lat: 19.7 };
+      var SATELLITE_SOURCE = 'muse-esri-world-imagery';
+      var SATELLITE_LAYER = 'muse-esri-world-imagery-layer';
+      var BUILDING_LAYER = 'muse-3d-buildings';
       var statusDot = document.getElementById('statusDot');
       var statusTitle = document.getElementById('statusTitle');
       var statusMessage = document.getElementById('statusMessage');
@@ -165,6 +177,9 @@
       var retryBtn = document.getElementById('retryBtn');
       var locateBtn = document.getElementById('locateBtn');
       var modeBtn = document.getElementById('modeBtn');
+      var mapStyleBtn = document.getElementById('mapStyleBtn');
+      var satelliteStyleBtn = document.getElementById('satelliteStyleBtn');
+      var threeDStyleBtn = document.getElementById('threeDStyleBtn');
       var loadFail = document.getElementById('loadFail');
       var placePanel = document.getElementById('placePanel');
       var placePanelClose = document.getElementById('placePanelClose');
@@ -175,6 +190,7 @@
       var mapHandle = null;
       var map = null;
       var is3D = true;
+      var styleMode = '3d';
       var locationSerial = 0;
       var lookupSerial = 0;
 
@@ -237,10 +253,10 @@
         reverseLookup(lat, lng, 'my,en').then(function (data) {
           var city = cityLabel(data);
           statusTitle.textContent = city || 'လက်ရှိတည်နေရာ';
-          statusMessage.textContent = 'လက်ရှိတည်နေရာ၏ 3D မြေပုံ — တိုက်ကိုနှိပ်ပြီး နာမည်နှင့် လိပ်စာကိုကြည့်ပါ။';
+          statusMessage.textContent = 'လက်ရှိတည်နေရာမြေပုံ — တိုက်ကိုနှိပ်ပြီး နာမည်နှင့် လိပ်စာကိုကြည့်ပါ။';
         }).catch(function () {
           statusTitle.textContent = 'လက်ရှိတည်နေရာ';
-          statusMessage.textContent = '3D မြေပုံရရှိပါပြီ။ တိုက်ကိုနှိပ်ပြီး အချက်အလက်ကိုကြည့်ပါ။';
+          statusMessage.textContent = 'မြေပုံရရှိပါပြီ။ တိုက်ကိုနှိပ်ပြီး အချက်အလက်ကိုကြည့်ပါ။';
         });
       }
 
@@ -268,25 +284,51 @@
         };
       }
 
+      function firstSymbolLayer() {
+        var style = map.getStyle();
+        var layers = style && style.layers ? style.layers : [];
+        for (var i = 0; i < layers.length; i++) {
+          if (layers[i].type === 'symbol' && layers[i].layout && layers[i].layout['text-field']) return layers[i].id;
+        }
+        return null;
+      }
+
+      function ensureSatelliteLayer() {
+        if (!map.getSource(SATELLITE_SOURCE)) {
+          map.addSource(SATELLITE_SOURCE, {
+            type: 'raster',
+            tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+            tileSize: 256,
+            maxzoom: 19,
+            attribution: 'Imagery © Esri, Maxar, Earthstar Geographics, and the GIS User Community'
+          });
+        }
+        if (!map.getLayer(SATELLITE_LAYER)) {
+          map.addLayer({
+            id: SATELLITE_LAYER,
+            type: 'raster',
+            source: SATELLITE_SOURCE,
+            layout: { visibility: 'none' },
+            paint: { 'raster-opacity': 1, 'raster-fade-duration': 180 }
+          }, firstSymbolLayer() || undefined);
+        }
+      }
+
       function addBuildings() {
-        if (map.getLayer('muse-3d-buildings')) return;
+        if (map.getLayer(BUILDING_LAYER)) return;
         var style = map.getStyle();
         var sources = style && style.sources ? style.sources : {};
         var sourceId = sources.openmaptiles ? 'openmaptiles' : Object.keys(sources).filter(function (key) { return sources[key] && sources[key].type === 'vector'; })[0];
         if (!sourceId) return;
-        var firstLabel = null;
-        var layers = style.layers || [];
-        for (var i = 0; i < layers.length; i++) {
-          if (layers[i].type === 'symbol' && layers[i].layout && layers[i].layout['text-field']) { firstLabel = layers[i].id; break; }
-        }
         map.addLayer({
-          id: 'muse-3d-buildings',
+          id: BUILDING_LAYER,
           type: 'fill-extrusion',
           source: sourceId,
           'source-layer': 'building',
           minzoom: 14,
+          layout: { visibility: 'none' },
           paint: extrusionPaint()
-        }, firstLabel || undefined);
+        }, firstSymbolLayer() || undefined);
       }
 
       function safeText(value) {
@@ -303,7 +345,7 @@
       function showBuildingPopup(event) {
         var serial = ++lookupSerial;
         var features = [];
-        try { features = map.queryRenderedFeatures(event.point, { layers: ['muse-3d-buildings'] }); } catch (ignore) {}
+        try { features = map.queryRenderedFeatures(event.point, { layers: [BUILDING_LAYER] }); } catch (ignore) {}
         var localName = features.length ? localFeatureName(features[0]) : '';
         placeType.textContent = features.length ? 'အဆောက်အအုံ' : 'ရွေးထားသောနေရာ';
         placeName.textContent = 'နေရာအချက်အလက် ရှာနေသည်…';
@@ -344,10 +386,8 @@
           map.addLayer({ id: 'muse-location-halo', type: 'circle', source: 'muse-current-location', paint: { 'circle-radius': 16, 'circle-color': 'rgba(8,127,103,.2)', 'circle-stroke-width': 2, 'circle-stroke-color': 'rgba(8,127,103,.38)' } });
           map.addLayer({ id: 'muse-location-dot', type: 'circle', source: 'muse-current-location', paint: { 'circle-radius': 8, 'circle-color': '#087f67', 'circle-stroke-width': 4, 'circle-stroke-color': '#ffffff' } });
         }
+        applyStyle('3d', false);
         map.flyTo({ center: [lng, lat], zoom: 17.3, pitch: 60, bearing: -18, duration: 2400, essential: true });
-        is3D = true;
-        modeBtn.textContent = '2D';
-        modeBtn.setAttribute('aria-label', 'နှစ်ဖက်မြင်မြေပုံသို့ ပြောင်းမည်');
         updateCity(lat, lng);
       }
 
@@ -366,11 +406,34 @@
         }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 12000 });
       }
 
-      function toggleMode() {
-        is3D = !is3D;
-        map.easeTo({ pitch: is3D ? 60 : 0, bearing: is3D ? map.getBearing() || -18 : 0, duration: 900 });
+      function updateStyleButtons() {
+        mapStyleBtn.setAttribute('aria-pressed', styleMode === 'map' ? 'true' : 'false');
+        satelliteStyleBtn.setAttribute('aria-pressed', styleMode === 'satellite' ? 'true' : 'false');
+        threeDStyleBtn.setAttribute('aria-pressed', styleMode === '3d' ? 'true' : 'false');
+      }
+
+      function applyStyle(nextMode, animate) {
+        styleMode = nextMode;
+        is3D = nextMode === '3d';
+        var showSatellite = nextMode !== 'map';
+        try {
+          ensureSatelliteLayer();
+          addBuildings();
+          map.setLayoutProperty(SATELLITE_LAYER, 'visibility', showSatellite ? 'visible' : 'none');
+          map.setLayoutProperty(BUILDING_LAYER, 'visibility', is3D ? 'visible' : 'none');
+        } catch (error) {
+          console.warn('Map style could not be fully applied', error);
+        }
+        var camera = { pitch: is3D ? 60 : 0, bearing: is3D ? (map.getBearing() || -18) : 0, duration: animate === false ? 0 : 900 };
+        if (animate === false) map.jumpTo(camera);
+        else map.easeTo(camera);
         modeBtn.textContent = is3D ? '2D' : '3D';
-        modeBtn.setAttribute('aria-label', is3D ? 'နှစ်ဖက်မြင်မြေပုံသို့ ပြောင်းမည်' : 'သုံးဖက်မြင်မြေပုံသို့ ပြောင်းမည်');
+        modeBtn.setAttribute('aria-label', is3D ? 'နှစ်ဖက်မြင်မြေပုံသို့ ပြောင်းမည်' : 'Satellite သုံးဖက်မြင်မြေပုံသို့ ပြောင်းမည်');
+        updateStyleButtons();
+      }
+
+      function toggleMode() {
+        applyStyle(is3D ? 'satellite' : '3d', true);
       }
 
       function finishMapSetup(attempt) {
@@ -381,16 +444,28 @@
           return;
         }
         map.jumpTo({ pitch: 48, bearing: -12 });
-        try { addBuildings(); } catch (error) { console.warn('3D buildings unavailable', error); }
+        try {
+          ensureSatelliteLayer();
+          addBuildings();
+          applyStyle('3d', false);
+        } catch (error) { console.warn('Satellite or 3D buildings unavailable', error); }
         map.on('styledata', function () {
-          if (map.isStyleLoaded()) {
-            try { addBuildings(); } catch (ignore) {}
-          }
+          if (!map.isStyleLoaded()) return;
+          try {
+            var missingSatellite = !map.getLayer(SATELLITE_LAYER);
+            var missingBuildings = !map.getLayer(BUILDING_LAYER);
+            if (missingSatellite) ensureSatelliteLayer();
+            if (missingBuildings) addBuildings();
+            if (missingSatellite || missingBuildings) {
+              map.setLayoutProperty(SATELLITE_LAYER, 'visibility', styleMode === 'map' ? 'none' : 'visible');
+              map.setLayoutProperty(BUILDING_LAYER, 'visibility', styleMode === '3d' ? 'visible' : 'none');
+            }
+          } catch (ignore) {}
         });
         map.on('click', showBuildingPopup);
         map.on('mousemove', function (event) {
           var hit = [];
-          try { hit = map.queryRenderedFeatures(event.point, { layers: ['muse-3d-buildings'] }); } catch (ignore) {}
+          try { hit = map.queryRenderedFeatures(event.point, { layers: [BUILDING_LAYER] }); } catch (ignore) {}
           map.getCanvas().style.cursor = hit.length ? 'pointer' : '';
         });
         requestLocation();
@@ -417,6 +492,9 @@
         else requestLocation();
       });
       modeBtn.addEventListener('click', toggleMode);
+      mapStyleBtn.addEventListener('click', function () { applyStyle('map', true); });
+      satelliteStyleBtn.addEventListener('click', function () { applyStyle('satellite', true); });
+      threeDStyleBtn.addEventListener('click', function () { applyStyle('3d', true); });
       placePanelClose.addEventListener('click', function () { placePanel.hidden = true; lookupSerial += 1; });
       window.addEventListener('load', initMap);
     })();
